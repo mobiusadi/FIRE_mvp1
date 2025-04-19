@@ -20,16 +20,30 @@ df[['latitude', 'longitude']] = df['location'].apply(get_lat_lon).tolist()
 # Dash App Initialization
 app = dash.Dash(__name__)
 
-# App Layout
+# Create card components
+cards = [
+    html.Div(
+        [
+            html.H6(f"Incident: {row['incident']}"),
+            html.P(f"Location: {row['location']}")
+        ],
+        className="incident-card",  # Add a CSS class for styling later
+        id=f"card-{row['incident']}" # Add a unique ID for potential callbacks
+    )
+    for index, row in df.iterrows()
+]
+
+# App Layout with cards and map
 app.layout = html.Div([
     html.H1("Fire Incident MVP"),
+    html.Div(cards, className="card-container"),  # Container for the cards
     dcc.Graph(
         id='incident-map',
         figure=px.scatter_map(df,
                                 lat="latitude",
                                 lon="longitude",
                                 hover_name="incident",
-                                zoom=13,
+                                zoom=10,
                                 height=600,
                                 center={'lat': df['latitude'].mean(), 'lon': df['longitude'].mean()}),
         config={'scrollZoom': True}
