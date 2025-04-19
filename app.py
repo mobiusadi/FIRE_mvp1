@@ -57,7 +57,6 @@ app.layout = html.Div([
 ])
 
 # Combined callback for map marker 
-# 
 @app.callback(
     Output('cards-container', 'children'),
     Output('incident-map', 'figure'),
@@ -91,6 +90,7 @@ def update_on_click(map_click_data, card_clicks, current_cards, current_figure, 
     if triggered_id == 'incident-map' and map_click_data:
         clicked_incident_str = map_click_data['points'][0]['hovertext']
         clicked_incident_num = int(clicked_incident_str)
+        print(f"Clicked Incident Num (from map): {clicked_incident_num}")
     elif isinstance(triggered_id, dict) and triggered_id['type'] == 'card' and card_clicks:
         valid_clicks = [c for c in card_clicks if c is not None]
         if valid_clicks:
@@ -112,11 +112,17 @@ def update_on_click(map_click_data, card_clicks, current_cards, current_figure, 
             if card_incident_num == clicked_incident_num:
                 updated_cards[i]['props']['style'] = {'border': '2px solid red', 'zIndex': 1}
 
-        # Update map center and marker color
+       # Update map center and marker color
         updated_figure['layout']['mapbox']['center'] = {'lat': clicked_lat, 'lon': clicked_lon}
         if 'data' in updated_figure and len(updated_figure['data']) > 0:
-            updated_figure['data'][0]['marker']['color'] = ['red' if name == str(clicked_incident_num) else 'blue' for name in updated_figure['data'][0]['hovertext']]
+            updated_marker_colors = ['blue'] * len(df) # Initialize all to blue
+            for i, row in df.iterrows():
+                if row['incident'] == clicked_incident_num:
+                    updated_marker_colors[i] = 'red'
+                    break # Assuming incident numbers are unique
+            updated_figure['data'][0]['marker']['color'] = updated_marker_colors
 
+    print("Updated Figure:", updated_figure) # <--- Inspect the figure object
     return updated_cards, updated_figure
 
 if __name__ == '__main__':
