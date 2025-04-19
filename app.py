@@ -5,7 +5,6 @@ from dash import html
 from dash.dependencies import Input, Output, State
 import plotly.express as px
 from dash import callback_context
-from datetime import datetime
 
 # Read the dummy data from the Excel file
 df = pd.read_excel("dummy_data.xlsx")
@@ -25,88 +24,158 @@ def get_lat_lon(location_str):
 # Apply the function to create separate lat and lon columns
 df[['latitude', 'longitude']] = df['Custom Location (Lat,Lon)'].apply(get_lat_lon).tolist()
 
-# Filter out rows with NaN in latitude or longitude
-df_cleaned = df.dropna(subset=['latitude', 'longitude'])
-
-# Convert 'Event data' to datetime objects and sort
-df_cleaned['event_datetime'] = pd.to_datetime(df_cleaned['Event data dd/mm/yyyy'], format='%d/%m/%Y')
-df_sorted = df_cleaned.sort_values(by='event_datetime', ascending=False).reset_index(drop=True)
+# Convert 'Event data' to datetime objects and extract year
+df['event_datetime'] = pd.to_datetime(df['Event data dd/mm/yyyy'], format='%d/%m/%Y')
+df['year'] = df['event_datetime'].dt.year.astype('Int64')
 
 app = dash.Dash(__name__)
 
-cards = [
-    html.Div(
-        [
-            html.H1(f"{row['A Location']}", style={'fontFamily': 'Arial', 'fontSize': '1.5em', 'marginBottom': '10px'}),
-            html.P([html.Strong("Energy Storage Capacity: "),
-                    html.Span(f"{row['B Energy Storage Capacity (MWh)']} MWh",
-                              style={'color': 'red', 'fontSize': '1.5em', 'fontWeight': 'bold'})],
-                   style={'fontFamily': 'Arial', 'marginBottom': '5px'}),
-            html.P([html.Strong("Power: "),
-                    html.Span(f"{row['C Power (MWh)']} MW",
-                              style={'color': 'red', 'fontSize': '1.5em', 'fontWeight': 'bold'})],
-                   style={'fontFamily': 'Arial', 'marginBottom': '5px'}),
-            *[html.P([html.Strong(f"{col}: "),
-                       html.A(f"{row[col]}", href=row[col], target="_blank",
-                              style={'fontFamily': 'Arial', 'fontSize': '0.9em'})],
-                      style={'fontFamily': 'Arial', 'fontSize': '0.9em', 'marginBottom': '5px'})
-              for col in df_sorted.columns
-              if col.startswith('Source URL') and isinstance(row[col], str) and row[col].startswith('http')],
-            *[html.P([html.Strong(f"{col}: "), f"{row[col]}"], style={'fontFamily': 'Arial', 'fontSize': '0.9em', 'marginBottom': '5px'})
-              for col in df_sorted.columns
-              if col not in ['latitude', 'longitude', 'event_datetime', 'A Location',
-                              'B Energy Storage Capacity (MWh)', 'C Power (MWh)']
-              and not col.startswith('Source URL')],
-            html.A(f"Read More", href=row['Source URL 1'], target="_blank", style={'fontFamily': 'Arial', 'fontSize': '0.8em'})
-        ],
-        className="incident-card",
-        id={'type': 'card', 'index': str(index)},
-        style={'fontFamily': 'Arial', 'marginBottom': '10px', 'border': '1px solid #ddd', 'padding': '10px'}
-    )
-    for index, row in df_sorted.iterrows()
-]
-
 app.layout = html.Div(
-    style={'display': 'flex', 'flexDirection': 'row', 'height': '80vh', 'fontFamily': 'Arial', 'padding': '20px'},
+    style={'display': 'flex', 'flexDirection': 'column', 'height': '100vh', 'fontFamily': 'Arial', 'padding': '20px'},
     children=[
         html.Div(
-            id="cards-container",
-            children=cards,
-            style={
-                'flex': '0 0 40%',
-                'overflowY': 'auto',
-                'paddingRight': '20px'
-            }
+            style={'marginBottom': '20px', 'display': 'flex', 'flexDirection': 'row', 'gap': '20px'},
+            children=[
+                html.Div(
+                    children=[
+                        html.H3("Sort by Power:"),
+                        dcc.Dropdown(
+                            id='power-sort-dropdown',
+                            options=[
+                                {'label': 'Power (High to Low)', 'value': 'power_desc'},
+                                {'label': 'Power (Low to High)', 'value': 'power_asc'}
+                            ],
+                            value=None,
+                            placeholder="Select Power Sort Order"
+                        ),
+                    ]
+                ),
+                html.Div(
+                    children=[
+                        html.H3("Filter by Year:"),
+                        dcc.Dropdown(
+                            id='year-filter-dropdown',
+                            options=[{'label': str(int(year)), 'value': int(year)} for year in sorted(df['year'].dropna().unique())],
+                            value=None,
+                            multi=True,
+                            placeholder="Select Year(s)"
+                        ),
+                    ]
+                ),
+            ]
         ),
         html.Div(
-            dcc.Graph(
-                id='incident-map',
-                figure=px.scatter_map(df_sorted,
-                                     lat="latitude",
-                                     lon="longitude",
-                                     hover_name="A Location",
-                                     size="C Power (MWh)",
-                                     size_max=30,
-                                     zoom=4,
-                                     height=600,
-                                     center={'lat': df_sorted['latitude'].mean(), 'lon': df_sorted['longitude'].mean()}),
-                config={'scrollZoom': True},
-            ),
-            style={'flex': '1'}
-        )
+            style={'display': 'flex', 'flexDirection': 'row', 'flexGrow': 1},
+            children=[
+                html.Div(
+                    id="cards-container",
+                    style={
+                        'flex': '0 0 40%',
+                        'overflowY': 'auto',
+                        'paddingRight': '20px'
+                    }
+                ),
+                html.Div(
+                    dcc.Graph(
+                        id='incident-map',
+                        style={'flex': '1', 'height': 'calc(100vh - 120px)'},
+                        config={'scrollZoom': True}
+                    )
+                )
+            ]
+        ),
     ]
 )
 
 @app.callback(
     Output('cards-container', 'children'),
     Output('incident-map', 'figure'),
+    Input('power-sort-dropdown', 'value'),
+    Input('year-filter-dropdown', 'value')
+)
+def update_content(power_sort, selected_years):
+    dff = df.copy().dropna(subset=['latitude', 'longitude'])
+
+    # Filter by year
+    if selected_years:
+        dff = dff[dff['year'].isin(selected_years)]
+
+    # Sort by power
+    if power_sort == 'power_desc':
+        dff = dff.sort_values(by='C Power (MWh)', ascending=False)
+    elif power_sort == 'power_asc':
+        dff = dff.sort_values(by='C Power (MWh)', ascending=True)
+
+    df_sorted = dff.reset_index(drop=True)
+
+    cards = [
+        html.Div(
+            [
+                html.H1(f"{row['A Location']}", style={'fontFamily': 'Arial', 'fontSize': '1.5em', 'marginBottom': '10px'}),
+                html.P([html.Strong("Energy Storage Capacity: "),
+                        html.Span(f"{row['B Energy Storage Capacity (MWh)']} MWh",
+                                  style={'color': 'red', 'fontSize': '1.5em', 'fontWeight': 'bold'})],
+                       style={'fontFamily': 'Arial', 'marginBottom': '5px'}),
+                html.P([html.Strong("Power: "),
+                        html.Span(f"{row['C Power (MWh)']} MW",
+                                  style={'color': 'red', 'fontSize': '1.5em', 'fontWeight': 'bold'})],
+                       style={'fontFamily': 'Arial', 'marginBottom': '5px'}),
+                *[html.P([html.Strong(f"{col}: "),
+                           html.A(f"{row[col]}", href=row[col], target="_blank",
+                                  style={'fontFamily': 'Arial', 'fontSize': '0.9em'})],
+                          style={'fontFamily': 'Arial', 'fontSize': '0.9em', 'marginBottom': '5px'})
+                  for col in df_sorted.columns
+                  if col.startswith('Source URL') and isinstance(row[col], str) and row[col].startswith('http')],
+                *[html.P([html.Strong(f"{col}: "), f"{row[col]}"], style={'fontFamily': 'Arial', 'fontSize': '0.9em', 'marginBottom': '5px'})
+                  for col in df_sorted.columns
+                  if col not in ['latitude', 'longitude', 'event_datetime', 'year', 'A Location',
+                                  'B Energy Storage Capacity (MWh)', 'C Power (MWh)']
+                  and not col.startswith('Source URL')],
+                html.A(f"Read More", href=row['Source URL 1'], target="_blank", style={'fontFamily': 'Arial', 'fontSize': '0.8em'})
+            ],
+            className="incident-card",
+            id={'type': 'card', 'index': str(index)},
+            style={'fontFamily': 'Arial', 'marginBottom': '10px', 'border': '1px solid #ddd', 'padding': '10px'}
+        )
+        for index, row in df_sorted.iterrows()
+    ]
+
+    fig = px.scatter_map(df_sorted,
+                         lat="latitude",
+                         lon="longitude",
+                         hover_name="A Location",
+                         size="C Power (MWh)",
+                         size_max=30,
+                         zoom=4,
+                         height=600,
+                         center={'lat': df_sorted['latitude'].mean(), 'lon': df_sorted['longitude'].mean()})
+
+    return cards, fig
+@app.callback(
+    Output('cards-container', 'children', allow_duplicate=True),
+    Output('incident-map', 'figure', allow_duplicate=True),
     Input('incident-map', 'clickData'),
     Input({'type': 'card', 'index': dash.ALL}, 'n_clicks'),
+    State('power-sort-dropdown', 'value'),
+    State('year-filter-dropdown', 'value'),
     State('cards-container', 'children'),
     State('incident-map', 'figure'),
-    State({'type': 'card', 'index': dash.ALL}, 'id')
+    State({'type': 'card', 'index': dash.ALL}, 'id'),
+    prevent_initial_call=True
 )
-def update_on_click(map_click_data, card_clicks, current_cards, current_figure, card_ids):
+def update_on_click(map_click_data, card_clicks, power_sort, selected_years, current_cards, current_figure, card_ids):
+    dff = df.copy().dropna(subset=['latitude', 'longitude'])
+
+    # Apply current filters and sorting
+    if selected_years:
+        dff = dff[dff['year'].isin(selected_years)]
+    if power_sort == 'power_desc':
+        dff = dff.sort_values(by='C Power (MWh)', ascending=False)
+    elif power_sort == 'power_asc':
+        dff = dff.sort_values(by='C Power (MWh)', ascending=True)
+
+    df_sorted = dff.reset_index(drop=True)
+
     ctx = callback_context
     triggered_id = ctx.triggered_id
 
