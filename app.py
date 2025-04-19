@@ -98,8 +98,10 @@ app.layout = html.Div(
                                      lat="latitude",
                                      lon="longitude",
                                      hover_name="A Location",
+                                     size="C Power (MWh)",
+                                     size_max=30,
                                      zoom=4,
-                                     height=600, # Set a numerical height here
+                                     height=600,
                                      center={'lat': df_sorted['latitude'].mean(), 'lon': df_sorted['longitude'].mean()}),
                 config={'scrollZoom': True},
             ),
