@@ -7,7 +7,7 @@ import plotly.express as px
 from dash import callback_context
 from datetime import datetime
 
-# More Comprehensive Dummy Data
+# More Comprehensive Dummy Data (same as before)
 data = {
     'A Location': ['Dublin 1', 'Cork City', 'Galway Bay', 'Limerick郊外', 'Waterford Port', 'Sligo Town', 'Killarney National Park'],
     'B Energy Storage Capacity (MWh)': [20, 50, 15, 30, 40, 25, 10],
@@ -49,22 +49,18 @@ data = {
 }
 df = pd.DataFrame(data)
 
-# Function to extract latitude and longitude
 def get_lat_lon(location_str):
     lat, lon = map(float, location_str.split(','))
     return lat, lon
 
-# Apply the function to create separate lat and lon columns
 df[['latitude', 'longitude']] = df['Custom Location (Lat,Lon)'].apply(get_lat_lon).tolist()
-
-# Convert 'Event data' to datetime objects and extract year for sorting
 df['event_datetime'] = pd.to_datetime(df['Event data dd/mm/yyyy'], format='%d/%m/%Y')
 df_sorted = df.sort_values(by='event_datetime', ascending=False).reset_index(drop=True)
 
-# Dash App Initialization
+print(df_sorted.columns) # <--- Add this line
+
 app = dash.Dash(__name__)
 
-# Create card components
 cards = [
     html.Div(
         [
@@ -77,32 +73,40 @@ cards = [
             html.A(f"Read More", href=row['Source URL 1'], target="_blank", style={'fontFamily': 'Arial', 'fontSize': '0.8em'})
         ],
         className="incident-card",
-        id={'type': 'card', 'index': str(index)}, # Changed ID to be the index as a string
+        id={'type': 'card', 'index': str(index)},
         style={'fontFamily': 'Arial', 'marginBottom': '10px', 'border': '1px solid #ddd', 'padding': '10px'}
     )
     for index, row in df_sorted.iterrows()
 ]
 
-# App Layout with cards and map
-app.layout = html.Div([
-    html.H1("Battery Energy Storage Incidents", style={'fontFamily': 'Arial'}),
-    html.Div(cards, id="cards-container", className="card-container"),
-    dcc.Graph(
-        id='incident-map',
-        figure=px.scatter_map(df_sorted,
-                             lat="latitude",
-                             lon="longitude",
-                             hover_name="A Location",
-                             zoom=4,
-                             height=600,
-                             center={'lat': df_sorted['latitude'].mean(), 'lon': df_sorted['longitude'].mean()}),
-        config={'scrollZoom': True},
-    ),
-    # Hidden div to store the ID of the clicked card (optional)
-    html.Div(id='clicked-card-id', style={'display': 'none'})
-], style={'fontFamily': 'Arial'})
-
-# Combined callback for map marker click and card click
+app.layout = html.Div(
+    style={'display': 'flex', 'flexDirection': 'row', 'height': '80vh', 'fontFamily': 'Arial', 'padding': '20px'},
+    children=[
+        html.Div(
+            id="cards-container",
+            children=cards,
+            style={
+                'flex': '0 0 40%',
+                'overflowY': 'auto',
+                'paddingRight': '20px'
+            }
+        ),
+        html.Div(
+            dcc.Graph(
+                id='incident-map',
+                figure=px.scatter_map(df_sorted,
+                                     lat="latitude",
+                                     lon="longitude",
+                                     hover_name="A Location",
+                                     zoom=4,
+                                     height=600, # Set a numerical height here
+                                     center={'lat': df_sorted['latitude'].mean(), 'lon': df_sorted['longitude'].mean()}),
+                config={'scrollZoom': True},
+            ),
+            style={'flex': '1'}
+        )
+    ]
+)
 @app.callback(
     Output('cards-container', 'children'),
     Output('incident-map', 'figure'),
@@ -116,17 +120,16 @@ def update_on_click(map_click_data, card_clicks, current_cards, current_figure, 
     ctx = callback_context
     triggered_id = ctx.triggered_id
 
-    updated_cards = list(current_cards) # Create a mutable copy
+    updated_cards = list(current_cards)
     updated_figure = current_figure.copy()
 
-    # Reset styles for all cards (except font)
+    # Reset styles for all cards (except font and basic layout)
     for i in range(len(updated_cards)):
-        if 'style' in updated_cards[i]['props'] and 'fontFamily' in updated_cards[i]['props']['style']:
-            updated_cards[i]['props']['style'] = {'fontFamily': 'Arial', 'marginBottom': '10px', 'border': '1px solid #ddd', 'padding': '10px'}
-        elif 'style' in updated_cards[i]['props']:
-            updated_cards[i]['props']['style'] = {'fontFamily': 'Arial', 'marginBottom': '10px', 'border': '1px solid #ddd', 'padding': '10px'}
+        default_style = {'fontFamily': 'Arial', 'marginBottom': '10px', 'border': '1px solid #ddd', 'padding': '10px'}
+        if 'style' in updated_cards[i]['props']:
+            updated_cards[i]['props']['style'] = default_style
         else:
-            updated_cards[i]['props']['style'] = {'fontFamily': 'Arial', 'marginBottom': '10px', 'border': '1px solid #ddd', 'padding': '10px'}
+            updated_cards[i]['props']['style'] = default_style
 
     # Reset marker colors on the map
     if 'data' in updated_figure and len(updated_figure['data']) > 0 and 'marker' in updated_figure['data'][0]:
@@ -156,25 +159,15 @@ def update_on_click(map_click_data, card_clicks, current_cards, current_figure, 
         clicked_lat = clicked_row_from_index['latitude']
         clicked_lon = clicked_row_from_index['longitude']
 
-        # Highlight the corresponding card and bring to top
-        selected_card = None
-        other_cards = []
+        # Highlight the corresponding card
         for i, card in enumerate(updated_cards):
             card_index = int(card['props']['id']['index'])
             if card_index == clicked_index:
                 new_card = card.copy()
                 new_card['props']['style'] = {'border': '2px solid red', 'zIndex': 1, 'fontFamily': 'Arial', 'marginBottom': '10px', 'padding': '10px'}
-                selected_card = new_card
-            else:
-                new_card = card.copy()
-                if 'style' not in new_card['props']:
-                    new_card['props']['style'] = {'fontFamily': 'Arial', 'marginBottom': '10px', 'border': '1px solid #ddd', 'padding': '10px'}
-                elif 'fontFamily' not in new_card['props']['style']:
-                    new_card['props']['style']['fontFamily'] = 'Arial'
-                other_cards.append(new_card)
-
-        if selected_card:
-            updated_cards = [selected_card] + other_cards
+                updated_cards[i] = new_card
+            elif 'style' not in updated_cards[i]['props'] or 'fontFamily' not in updated_cards[i]['props']['style']:
+                updated_cards[i]['props']['style'] = {'fontFamily': 'Arial', 'marginBottom': '10px', 'border': '1px solid #ddd', 'padding': '10px'}
 
         # Update map center and marker color
         updated_figure['layout']['mapbox']['center'] = {'lat': clicked_lat, 'lon': clicked_lon}
@@ -185,6 +178,18 @@ def update_on_click(map_click_data, card_clicks, current_cards, current_figure, 
                     updated_marker_colors[i] = 'red'
                     break
             updated_figure['data'][0]['marker']['color'] = updated_marker_colors
+
+        # Reorder the cards to bring the selected one to the top
+        selected_card = None
+        other_cards = []
+        for card in updated_cards:
+            card_index = int(card['props']['id']['index'])
+            if card_index == clicked_index:
+                selected_card = card
+            else:
+                other_cards.append(card)
+        if selected_card:
+            updated_cards = [selected_card] + other_cards
 
     return updated_cards, updated_figure
 
