@@ -56,7 +56,8 @@ app.layout = html.Div([
     html.Div(id='clicked-card-id', style={'display': 'none'})
 ])
 
-# Combined callback for map marker click and card click
+# Combined callback for map marker 
+# 
 @app.callback(
     Output('cards-container', 'children'),
     Output('incident-map', 'figure'),
@@ -69,6 +70,7 @@ app.layout = html.Div([
 def update_on_click(map_click_data, card_clicks, current_cards, current_figure, card_ids):
     ctx = callback_context
     triggered_id = ctx.triggered_id
+    print(f"Triggered ID: {triggered_id}")
 
     updated_cards = list(current_cards) # Create a mutable copy
     updated_figure = current_figure.copy()
@@ -90,9 +92,12 @@ def update_on_click(map_click_data, card_clicks, current_cards, current_figure, 
         clicked_incident_str = map_click_data['points'][0]['hovertext']
         clicked_incident_num = int(clicked_incident_str)
     elif isinstance(triggered_id, dict) and triggered_id['type'] == 'card' and card_clicks:
-        clicked_card_index = card_clicks.index(max(card_clicks))
-        clicked_card_id_str = card_ids[clicked_card_index]['index']
-        clicked_incident_num = int(clicked_card_id_str.split('-')[1])
+        valid_clicks = [c for c in card_clicks if c is not None]
+        if valid_clicks:
+            clicked_card_index = card_clicks.index(max(valid_clicks))
+            clicked_card_id_str = card_ids[clicked_card_index]['index']
+            clicked_incident_num = int(clicked_card_id_str.split('-')[1])
+            print(f"Clicked Incident Num (from card): {clicked_incident_num}")
 
     if clicked_incident_num is not None:
         # Find the coordinates of the clicked incident
