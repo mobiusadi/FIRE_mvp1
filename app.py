@@ -65,11 +65,8 @@ cards = [
     html.Div(
         [
             html.H6(f"{row['A Location']}", style={'fontFamily': 'Arial'}),
-            html.P(f"Date: {row['Event data dd/mm/yyyy']}", style={'fontFamily': 'Arial'}),
-            html.P(
-                html.Span(f"{row['C Power (MWh)']}MW", style={'color': 'red', 'fontSize': '1.5em', 'fontFamily': 'Arial'})
-            ),
-            html.P(f"Cause: {row['Cause ( a long description of likely cause of event)']}", style={'fontFamily': 'Arial', 'fontSize': '0.9em'}),
+            *[html.P(f"{col}: {row[col]}", style={'fontFamily': 'Arial', 'fontSize': '0.9em'})
+              for col in df_sorted.columns if col not in ['latitude', 'longitude', 'event_datetime']],
             html.A(f"Read More", href=row['Source URL 1'], target="_blank", style={'fontFamily': 'Arial', 'fontSize': '0.8em'})
         ],
         className="incident-card",
@@ -78,7 +75,6 @@ cards = [
     )
     for index, row in df_sorted.iterrows()
 ]
-
 app.layout = html.Div(
     style={'display': 'flex', 'flexDirection': 'row', 'height': '80vh', 'fontFamily': 'Arial', 'padding': '20px'},
     children=[
