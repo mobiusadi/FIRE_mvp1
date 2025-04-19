@@ -72,7 +72,8 @@ app.layout = html.Div(
                     style={
                         'flex': '0 0 40%',
                         'overflowY': 'auto',
-                        'paddingRight': '20px'
+                        'paddingRight': '20px',
+                        'maxHeight': 'calc(100vh - 180px)' # Adjust value as needed
                     }
                 ),
                 html.Div(
@@ -81,7 +82,7 @@ app.layout = html.Div(
                         style={'flex': '1 1 auto', 'height': 'calc(100vh - 120px)', 'width': '100%'},
                         config={'scrollZoom': True}
                     ),
-                    style={'width': '100%', 'height': '100%'} # Added style to the container div
+                    style={'width': '100%', 'height': '100%'}
                 )
             ]
         ),
