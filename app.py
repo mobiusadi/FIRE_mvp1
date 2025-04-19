@@ -6,8 +6,8 @@ from dash.dependencies import Input, Output, State
 import plotly.express as px
 from dash import callback_context
 
-# Read the dummy data from the Excel file
-df = pd.read_excel("dummy_data.xlsx")
+# Read the main failure data from the Excel file
+df = pd.read_excel("Failure_DB_3.xlsx")
 
 # Function to extract latitude and longitude
 def get_lat_lon(location_str):
@@ -22,10 +22,10 @@ def get_lat_lon(location_str):
         return None, None
 
 # Apply the function to create separate lat and lon columns
-df[['latitude', 'longitude']] = df['Custom Location (Lat,Lon)'].apply(get_lat_lon).tolist()
+df[['latitude', 'longitude']] = df['Custom location (Lat,Lon)'].apply(get_lat_lon).tolist()
 
-# Convert 'Event data' to datetime objects and extract year
-df['event_datetime'] = pd.to_datetime(df['Event data dd/mm/yyyy'], format='%d/%m/%Y')
+# Convert 'Event Date' to datetime objects and extract year
+df['event_datetime'] = pd.to_datetime(df['Event Date'], errors='coerce')
 df['year'] = df['event_datetime'].dt.year.astype('Int64')
 
 app = dash.Dash(__name__)
@@ -38,15 +38,15 @@ app.layout = html.Div(
             children=[
                 html.Div(
                     children=[
-                        html.H3("Sort by Power:"),
+                        html.H3("Sort by Capacity (MW):"),
                         dcc.Dropdown(
                             id='power-sort-dropdown',
                             options=[
-                                {'label': 'Power (High to Low)', 'value': 'power_desc'},
-                                {'label': 'Power (Low to High)', 'value': 'power_asc'}
+                                {'label': 'Capacity (High to Low)', 'value': 'capacity_desc'},
+                                {'label': 'Capacity (Low to High)', 'value': 'capacity_asc'}
                             ],
                             value=None,
-                            placeholder="Select Power Sort Order"
+                            placeholder="Select Capacity Sort Order"
                         ),
                     ]
                 ),
@@ -64,7 +64,7 @@ app.layout = html.Div(
                 ),
             ]
         ),
-         html.Div(
+        html.Div(
             style={'display': 'flex', 'flexDirection': 'row', 'flexGrow': 1},
             children=[
                 html.Div(
@@ -73,7 +73,7 @@ app.layout = html.Div(
                         'flex': '0 0 40%',
                         'overflowY': 'auto',
                         'paddingRight': '20px',
-                        'maxHeight': 'calc(100vh - 180px)' # Adjust value as needed
+                        'maxHeight': 'calc(100vh - 180px)'
                     }
                 ),
                 html.Div(
@@ -102,24 +102,25 @@ def update_content(power_sort, selected_years):
     if selected_years:
         dff = dff[dff['year'].isin(selected_years)]
 
-    # Sort by power
-    if power_sort == 'power_desc':
-        dff = dff.sort_values(by='C Power (MWh)', ascending=False)
-    elif power_sort == 'power_asc':
-        dff = dff.sort_values(by='C Power (MWh)', ascending=True)
+    # Sort by capacity (MW)
+    if power_sort == 'capacity_desc':
+        dff = dff.sort_values(by='Capacity (MW)', ascending=False)
+    elif power_sort == 'capacity_asc':
+        dff = dff.sort_values(by='Capacity (MW)', ascending=True)
 
-    df_sorted = dff.reset_index(drop=True)
+    # Drop rows where 'Capacity (MW)' is NaN before plotting the map
+    df_sorted = dff.dropna(subset=['Capacity (MW)']).reset_index(drop=True)
 
     cards = [
         html.Div(
             [
-                html.H1(f"{row['A Location']}", style={'fontFamily': 'Arial', 'fontSize': '1.5em', 'marginBottom': '10px'}),
-                html.P([html.Strong("Energy Storage Capacity: "),
-                        html.Span(f"{row['B Energy Storage Capacity (MWh)']} MWh",
+                html.H1(f"{row['Location']}", style={'fontFamily': 'Arial', 'fontSize': '1.5em', 'marginBottom': '10px'}),
+                html.P([html.Strong("Capacity (MWh): "),
+                        html.Span(f"{row['Capacity (MWh)']} MWh",
                                   style={'color': 'red', 'fontSize': '1.5em', 'fontWeight': 'bold'})],
                        style={'fontFamily': 'Arial', 'marginBottom': '5px'}),
-                html.P([html.Strong("Power: "),
-                        html.Span(f"{row['C Power (MWh)']} MW",
+                html.P([html.Strong("Power (MW): "),
+                        html.Span(f"{row['Capacity (MW)']} MW",
                                   style={'color': 'red', 'fontSize': '1.5em', 'fontWeight': 'bold'})],
                        style={'fontFamily': 'Arial', 'marginBottom': '5px'}),
                 *[html.P([html.Strong(f"{col}: "),
@@ -130,8 +131,8 @@ def update_content(power_sort, selected_years):
                   if col.startswith('Source URL') and isinstance(row[col], str) and row[col].startswith('http')],
                 *[html.P([html.Strong(f"{col}: "), f"{row[col]}"], style={'fontFamily': 'Arial', 'fontSize': '0.9em', 'marginBottom': '5px'})
                   for col in df_sorted.columns
-                  if col not in ['latitude', 'longitude', 'event_datetime', 'year', 'A Location',
-                                  'B Energy Storage Capacity (MWh)', 'C Power (MWh)']
+                  if col not in ['latitude', 'longitude', 'event_datetime', 'year', 'Location',
+                                  'Capacity (MWh)', 'Capacity (MW)']
                   and not col.startswith('Source URL')],
                 html.A(f"Read More", href=row['Source URL 1'], target="_blank", style={'fontFamily': 'Arial', 'fontSize': '0.8em'})
             ],
@@ -145,14 +146,29 @@ def update_content(power_sort, selected_years):
     fig = px.scatter_map(df_sorted,
                          lat="latitude",
                          lon="longitude",
-                         hover_name="A Location",
-                         size="C Power (MWh)",
+                         hover_name="Location",
+                         size="Capacity (MW)",
                          size_max=30,
                          zoom=4,
                          height=600,
                          center={'lat': df_sorted['latitude'].mean(), 'lon': df_sorted['longitude'].mean()})
 
     return cards, fig
+
+@app.callback(
+    Input({'type': 'card', 'index': dash.ALL}, 'n_clicks'),
+    State({'type': 'card', 'index': dash.ALL}, 'id'),
+    prevent_initial_call=True
+)
+def log_card_click(n_clicks, card_ids):
+    ctx = callback_context
+    triggered_id = ctx.triggered_id
+    print(f"Card Click Callback Triggered by: {triggered_id}")
+    print(f"n_clicks: {n_clicks}")
+    if triggered_id:
+        clicked_card = [card_id['index'] for i, card_id in enumerate(card_ids) if card_id == triggered_id][0]
+        print(f"Clicked Card Index: {clicked_card}")
+
 @app.callback(
     Output('cards-container', 'children', allow_duplicate=True),
     Output('incident-map', 'figure', allow_duplicate=True),
@@ -167,34 +183,21 @@ def update_content(power_sort, selected_years):
 )
 def update_on_click(map_click_data, card_clicks, power_sort, selected_years, current_cards, current_figure, card_ids):
     dff = df.copy().dropna(subset=['latitude', 'longitude'])
-
-    # Apply current filters and sorting
     if selected_years:
         dff = dff[dff['year'].isin(selected_years)]
-    if power_sort == 'power_desc':
-        dff = dff.sort_values(by='C Power (MWh)', ascending=False)
-    elif power_sort == 'power_asc':
-        dff = dff.sort_values(by='C Power (MWh)', ascending=True)
-
-    df_sorted = dff.reset_index(drop=True)
+    if power_sort:
+        ascending = power_sort == 'capacity_asc'
+        dff = dff.sort_values(by='Capacity (MW)', ascending=ascending)
+    df_sorted = dff.dropna(subset=['Capacity (MW)']).reset_index(drop=True)
 
     ctx = callback_context
     triggered_id = ctx.triggered_id
+    print(f"Update_on_click triggered by: {triggered_id}")
+    print(f"map_click_data: {map_click_data}")
+    print(f"card_clicks: {card_clicks}")
 
     updated_cards = list(current_cards)
     updated_figure = current_figure.copy()
-
-    # Reset styles for all cards (except font and basic layout)
-    for i in range(len(updated_cards)):
-        default_style = {'fontFamily': 'Arial', 'marginBottom': '10px', 'border': '1px solid #ddd', 'padding': '10px'}
-        if 'style' in updated_cards[i]['props']:
-            updated_cards[i]['props']['style'] = default_style
-        else:
-            updated_cards[i]['props']['style'] = default_style
-
-    # Reset marker colors on the map
-    if 'data' in updated_figure and len(updated_figure['data']) > 0 and 'marker' in updated_figure['data'][0]:
-        updated_figure['data'][0]['marker']['color'] = ['blue'] * len(df_sorted)
 
     clicked_index = None
     clicked_lat = None
@@ -203,44 +206,46 @@ def update_on_click(map_click_data, card_clicks, power_sort, selected_years, cur
 
     if triggered_id == 'incident-map' and map_click_data:
         clicked_location_name = map_click_data['points'][0]['hovertext']
-        clicked_row = df_sorted[df_sorted['A Location'] == clicked_location_name].iloc[0]
+        clicked_row = df_sorted[df_sorted['Location'] == clicked_location_name].iloc[0]
         clicked_index = clicked_row.name
         clicked_lat = clicked_row['latitude']
         clicked_lon = clicked_row['longitude']
+        print(f"Map Clicked - Location: {clicked_location_name}, Index: {clicked_index}")
     elif isinstance(triggered_id, dict) and triggered_id['type'] == 'card' and card_clicks:
         valid_clicks = [c for c in card_clicks if c is not None]
         if valid_clicks:
             clicked_card_index_in_list = card_clicks.index(max(valid_clicks))
             clicked_card_id_str = card_ids[clicked_card_index_in_list]['index']
             clicked_index = int(clicked_card_id_str)
-            clicked_location_name = df_sorted.iloc[clicked_index]['A Location']
+            clicked_location_name = df_sorted.iloc[clicked_index]['Location']
+            clicked_lat = df_sorted.iloc[clicked_index]['latitude']
+            clicked_lon = df_sorted.iloc[clicked_index]['longitude']
+            print(f"Card Clicked - Index: {clicked_index}, Location: {clicked_location_name}")
 
     if clicked_index is not None:
-        clicked_row_from_index = df_sorted.iloc[clicked_index]
-        clicked_lat = clicked_row_from_index['latitude']
-        clicked_lon = clicked_row_from_index['longitude']
-
-        # Highlight the corresponding card
+        # Highlight card
         for i, card in enumerate(updated_cards):
             card_index = int(card['props']['id']['index'])
             if card_index == clicked_index:
                 new_card = card.copy()
                 new_card['props']['style'] = {'border': '2px solid red', 'zIndex': 1, 'fontFamily': 'Arial', 'marginBottom': '10px', 'padding': '10px'}
                 updated_cards[i] = new_card
-            elif 'style' not in updated_cards[i]['props'] or 'fontFamily' not in updated_cards[i]['props']['style']:
-                updated_cards[i]['props']['style'] = {'fontFamily': 'Arial', 'marginBottom': '10px', 'border': '1px solid #ddd', 'padding': '10px'}
+            else:
+                default_style = {'fontFamily': 'Arial', 'marginBottom': '10px', 'border': '1px solid #ddd', 'padding': '10px'}
+                updated_cards[i]['props']['style'] = default_style
 
         # Update map center and marker color
         updated_figure['layout']['mapbox']['center'] = {'lat': clicked_lat, 'lon': clicked_lon}
         if 'data' in updated_figure and len(updated_figure['data']) > 0:
             updated_marker_colors = ['blue'] * len(df_sorted)
-            for i, row in df_sorted.iterrows():
-                if row['A Location'] == clicked_location_name:
-                    updated_marker_colors[i] = 'red'
-                    break
+            if clicked_location_name:
+                for i, row in df_sorted.iterrows():
+                    if row['Location'] == clicked_location_name:
+                        updated_marker_colors[i] = 'red'
+                        break
             updated_figure['data'][0]['marker']['color'] = updated_marker_colors
 
-        # Reorder the cards to bring the selected one to the top
+        # Reorder cards
         selected_card = None
         other_cards = []
         for card in updated_cards:
