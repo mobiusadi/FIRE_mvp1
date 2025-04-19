@@ -64,7 +64,7 @@ app.layout = html.Div(
                 ),
             ]
         ),
-        html.Div(
+         html.Div(
             style={'display': 'flex', 'flexDirection': 'row', 'flexGrow': 1},
             children=[
                 html.Div(
@@ -78,9 +78,10 @@ app.layout = html.Div(
                 html.Div(
                     dcc.Graph(
                         id='incident-map',
-                        style={'flex': '1', 'height': 'calc(100vh - 120px)'},
+                        style={'flex': '1 1 auto', 'height': 'calc(100vh - 120px)', 'width': '100%'},
                         config={'scrollZoom': True}
-                    )
+                    ),
+                    style={'width': '100%', 'height': '100%'} # Added style to the container div
                 )
             ]
         ),
